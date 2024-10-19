@@ -2,8 +2,23 @@ import io
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from ultralytics import YOLO
 from PIL import Image
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+
+origins = [
+    "http://localhost:5173",
+    "http://172.18.50.52:5173"
+
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/")
 def read_root():
@@ -30,7 +45,9 @@ async def classify_image(file: list[UploadFile]):
         embeddings = [result.verbose() for result in classify]
         joined_results = "".join(embeddings)
 
-        return filter_by_repeated_name( data_to_dict(joined_results) )
+        data_with_no_repeated_names = filter_by_repeated_name( data_to_dict(joined_results) )
+        data = sort_by_confidence(data_with_no_repeated_names)
+        return filter_by_repeated_name( data )
 
     image = Image.open(io.BytesIO(file[0].file.read()))
     classify = model.predict(image, conf=0.4)
@@ -60,3 +77,6 @@ def filter_by_repeated_name(data):
 
 def filter_by_confidence(data, threshold):
     return [item for item in data if item["conf"] < threshold]
+
+def sort_by_confidence(data):
+    return sorted(data, key=lambda x: x["conf"], reverse=True)
