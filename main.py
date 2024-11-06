@@ -1,4 +1,5 @@
 import io
+import re
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from ultralytics import YOLO
 from PIL import Image
@@ -27,7 +28,8 @@ def read_root():
 @app.post("/classify")
 async def classify_image(file: list[UploadFile]):
 
-    model = YOLO("yolo11n-cls.pt")
+    #model = YOLO("yolo11n-cls.pt")
+    model = YOLO("best.pt")
 
     allowed_types = ["image/jpeg", "image/png", "image/gif"]
     max_file_size = 10 * 1024 * 1024 # 10MB
@@ -39,15 +41,15 @@ async def classify_image(file: list[UploadFile]):
         if f.size > max_file_size:
             raise HTTPException(status_code=400, detail=f"Archivo demasiado grande: {f.filename}")
 
-    if ( len(file) > 1 ):        
+    if ( len(file) > 1 ):
         images = [Image.open(io.BytesIO(f.file.read())) for f in file]
         classify = model.predict(images)
+        print(classify)
         embeddings = [result.verbose() for result in classify]
         joined_results = "".join(embeddings)
 
         data_with_no_repeated_names = filter_by_repeated_name( data_to_dict(joined_results) )
-        data = sort_by_confidence(data_with_no_repeated_names)
-        return filter_by_repeated_name( data )
+        return filter_by_repeated_name( sort_by_confidence(data_with_no_repeated_names) )
 
     image = Image.open(io.BytesIO(file[0].file.read()))
     classify = model.predict(image, conf=0.4)
@@ -58,11 +60,22 @@ def data_to_dict(data):
     result = []
     for part in parts:
         if part.strip():
-            name, number = part.strip().split()
-            result.append({
-                "name": name, 
-                "conf": float(number)
-            })
+            # name, number = part.strip().split()
+            # result.append({
+            #     "name": name,
+            #     "conf": float(number)
+            # })
+
+            match = re.match(r"(.+?)\s+([\d.]+)", part.strip())
+            if match:
+                name, number = match.groups()
+                result.append({
+                    "name": name,
+                    "conf": float(number)
+                })
+    return result
+
+
     return result
 
 def filter_by_repeated_name(data):
